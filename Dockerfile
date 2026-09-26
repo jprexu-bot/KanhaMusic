@@ -1,4 +1,4 @@
-FROM golang:1.26.2-bookworm AS builder
+FROM golang:1.26.0-bookworm AS builder
 
 WORKDIR /build
 
@@ -7,6 +7,8 @@ RUN apt-get update && \
     apt-get install -y \
         unzip \
         curl \
+        ca-certificates \
+        tar \
         zlib1g-dev && \
     rm -rf /var/lib/apt/lists/*
 
@@ -18,7 +20,10 @@ COPY . .
 
 RUN mkdir -p /build/config/cookies && \
     chmod +x install.sh && \
-    ./install.sh -n -t --skip-summary && \
+    ./install.sh -n -t --quiet --skip-summary || (echo "--- install.sh failed: installer logs ---"; cat /tmp/install_*.log 2>/dev/null || true; exit 1) && \
+    test -f /build/libntgcalls.a && \
+    test -f /build/ntgcalls/ntgcalls.h && \
+    test -f /build/libtdjson.so.1.8.66 && \
     CGO_ENABLED=1 go build -v -trimpath -ldflags="-w -s" -o app ./cmd/app/
 
 
@@ -45,7 +50,7 @@ RUN curl -fL \
     chmod 0755 /usr/local/bin/deno && \
     rm -f /tmp/deno-install.sh
 
-ENV LD_LIBRARY_PATH=/app
+ENV LD_LIBRARY_PATH=/app:$LD_LIBRARY_PATH
 ENV TDJSON_PATH=/app/libtdjson.so.1.8.66
 
 RUN useradd -r -u 10001 appuser && \
@@ -56,9 +61,8 @@ WORKDIR /app
 
 COPY --from=builder /build/app /app/app
 COPY --from=builder /build/libtdjson.so* /app/
-COPY --from=builder /build/libntgcalls.so* /app/
 COPY --from=builder /build/config/cookies /app/config/cookies
-RUN chmod 0755 /app/libtdjson.so* /app/libntgcalls.so* && chown -R appuser:appuser /app
+RUN chmod 0755 /app/libtdjson.so* && chown -R appuser:appuser /app
 
 USER appuser
 
