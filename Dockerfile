@@ -18,7 +18,7 @@ COPY . .
 
 RUN mkdir -p /build/config/cookies && \
     chmod +x install.sh && \
-    ./install.sh -n -t --quiet --skip-summary && \
+    ./install.sh -n -t --skip-summary && \
     CGO_ENABLED=1 go build -v -trimpath -ldflags="-w -s" -o app ./cmd/app/
 
 
@@ -45,7 +45,7 @@ RUN curl -fL \
     chmod 0755 /usr/local/bin/deno && \
     rm -f /tmp/deno-install.sh
 
-ENV LD_LIBRARY_PATH=/app:$LD_LIBRARY_PATH
+ENV LD_LIBRARY_PATH=/app
 ENV TDJSON_PATH=/app/libtdjson.so.1.8.66
 
 RUN useradd -r -u 10001 appuser && \
@@ -56,8 +56,9 @@ WORKDIR /app
 
 COPY --from=builder /build/app /app/app
 COPY --from=builder /build/libtdjson.so* /app/
+COPY --from=builder /build/libntgcalls.so* /app/
 COPY --from=builder /build/config/cookies /app/config/cookies
-RUN chmod 0755 /app/libtdjson.so* && chown -R appuser:appuser /app
+RUN chmod 0755 /app/libtdjson.so* /app/libntgcalls.so* && chown -R appuser:appuser /app
 
 USER appuser
 

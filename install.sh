@@ -691,20 +691,20 @@ install_ntgcalls() {
     case "$OS_TYPE" in
         linux)
             if [[ "$ARCH_TYPE" == "amd64" ]]; then
-                url="https://github.com/pytgcalls/ntgcalls/releases/download/$NTGCALLS_VERSION/ntgcalls.linux-x86_64-static_libs.zip"
+                url="https://github.com/pytgcalls/ntgcalls/releases/download/$NTGCALLS_VERSION/ntgcalls.linux-x86_64-shared_libs.zip"
             else
-                url="https://github.com/pytgcalls/ntgcalls/releases/download/$NTGCALLS_VERSION/ntgcalls.linux-arm64-static_libs.zip"
+                url="https://github.com/pytgcalls/ntgcalls/releases/download/$NTGCALLS_VERSION/ntgcalls.linux-arm64-shared_libs.zip"
             fi
             ;;
         macos)
             if [[ "$ARCH_TYPE" == "arm64" ]]; then
-                url="https://github.com/pytgcalls/ntgcalls/releases/download/$NTGCALLS_VERSION/ntgcalls.macos-arm64-static_libs.zip"
+                url="https://github.com/pytgcalls/ntgcalls/releases/download/$NTGCALLS_VERSION/ntgcalls.macos-arm64-shared_libs.zip"
             else
                 print_error "ntgcalls unavailable for macOS x86_64" "build from source"
             fi
             ;;
         windows)
-            url="https://github.com/pytgcalls/ntgcalls/releases/download/$NTGCALLS_VERSION/ntgcalls.windows-x86_64-static_libs.zip"
+            url="https://github.com/pytgcalls/ntgcalls/releases/download/$NTGCALLS_VERSION/ntgcalls.windows-x86_64-shared_libs.zip"
             ;;
     esac
 
@@ -714,12 +714,20 @@ install_ntgcalls() {
         mkdir -p tmp_ntg
         if run_cmd_arr "Extracting ntgcalls" unzip -q ntgcalls.zip -d tmp_ntg; then
             mkdir -p ntgcalls
-            cp tmp_ntg/include/ntgcalls.h ntgcalls/
+            local header_file
+            header_file=$(find tmp_ntg -type f -name "ntgcalls.h" | head -n1)
+            if [[ -z "$header_file" ]]; then
+                rm -rf ntgcalls.zip tmp_ntg
+                print_soft_error "ntgcalls header not found in archive"
+                return 1
+            fi
+            cp "$header_file" ntgcalls/
+
             local lib_file
-            lib_file=$(find tmp_ntg/lib -type f | head -n1)
+            lib_file=$(find tmp_ntg -type f \( -name "libntgcalls.so*" -o -name "libntgcalls.dylib" -o -name "ntgcalls.dll" -o -name "ntgcalls.lib" \) | head -n1)
             if [[ -n "$lib_file" ]]; then
-                mv "$lib_file" "./$(basename "$lib_file")"
-                print_success "ntgcalls installed"
+                cp "$lib_file" "./$(basename "$lib_file")"
+                print_success "ntgcalls installed ($(basename "$lib_file"))"
                 rm -rf ntgcalls.zip tmp_ntg
                 return 0
             fi
@@ -908,8 +916,8 @@ main() {
     check_install_go
     check_install_ffmpeg
     check_install_ytdlp
-    install_ntgcalls
-    install_tdjson
+    install_ntgcalls || print_error "ntgcalls installation failed" "check the installer log above"
+    install_tdjson || print_error "TDLib installation failed" "check the installer log above"
 
     cleanup_temp_files
     reload_shell_if_needed
