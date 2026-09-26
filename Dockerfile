@@ -1,4 +1,4 @@
-FROM golang:1.26.0-bookworm AS builder
+FROM golang:1.26.2-bookworm AS builder
 
 WORKDIR /build
 
@@ -7,8 +7,6 @@ RUN apt-get update && \
     apt-get install -y \
         unzip \
         curl \
-        ca-certificates \
-        tar \
         zlib1g-dev && \
     rm -rf /var/lib/apt/lists/*
 
@@ -20,10 +18,7 @@ COPY . .
 
 RUN mkdir -p /build/config/cookies && \
     chmod +x install.sh && \
-    ./install.sh -n -t --quiet --skip-summary || (echo "--- install.sh failed: installer logs ---"; cat /tmp/install_*.log 2>/dev/null || true; exit 1) && \
-    test -f /build/libntgcalls.a && \
-    test -f /build/ntgcalls/ntgcalls.h && \
-    test -f /build/libtdjson.so.1.8.66 && \
+    ./install.sh -n -t --quiet --skip-summary && \
     CGO_ENABLED=1 go build -v -trimpath -ldflags="-w -s" -o app ./cmd/app/
 
 
