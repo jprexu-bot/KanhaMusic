@@ -1,6 +1,6 @@
 /*
- * ● KanhaMusic
- * ○ A high-performance engine for streaming music in Telegram voicechats.
+ * â— KanhaMusic
+ * â—‹ A high-performance engine for streaming music in Telegram voicechats.
  *
  * Copyright (C) 2026 Kanha
  *
@@ -19,10 +19,8 @@ package platforms
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os/exec"
 	"regexp"
 	"strings"
 	"time"
@@ -111,18 +109,10 @@ func (p *YouTubePlatform) Get(input string, video bool) ([]*state.Track, error) 
 	return withVideo(tracks, video), nil
 }
 
-func (p *YouTubePlatform) CanDownload(source state.PlatformName) bool {
-	return source == PlatformYouTube
-}
+func (p *YouTubePlatform) CanDownload(_ state.PlatformName) bool { return false }
 
-func (p *YouTubePlatform) Download(ctx context.Context, track *state.Track, _ *td.Message) (string, error) {
-	if track == nil || track.URL == "" {
-		return "", errors.New("invalid YouTube track")
-	}
-	if path, err := pythonYouTubeDownload(ctx, track.URL, track.Video); err == nil && path != "" {
-		return path, nil
-	}
-	return "", errors.New("python YouTube downloader failed")
+func (p *YouTubePlatform) Download(_ context.Context, _ *state.Track, _ *td.Message) (string, error) {
+	return "", errors.New("youtube platform does not support downloading")
 }
 
 func withVideo(tracks []*state.Track, video bool) []*state.Track {
@@ -255,12 +245,12 @@ func (p *YouTubePlatform) handleTrackURL(rawURL string) ([]*state.Track, error) 
 			}
 		}
 	}
-
-	if t, err := p.fetchTrackViaOEmbed(videoID); err == nil && t != nil {
+    
+    	if t, err := p.fetchTrackViaOEmbed(videoID); err == nil && t != nil {
 		p.cache.Set("track:"+videoID, []*state.Track{t})
 		return []*state.Track{t}, nil
 	}
-
+    
 	return nil, errors.New("track not found")
 }
 
@@ -352,10 +342,6 @@ func (p *YouTubePlatform) performSearch(query string, limit int) ([]*state.Track
 	}
 
 	if err := p.callInnerTube("search", payload, &result); err != nil {
-		logger.Warnf("[YouTube] InnerTube search failed, trying Python fallback: %v", err)
-		if fallback, ferr := pythonYouTubeSearch(query, limit); ferr == nil && len(fallback) > 0 {
-			return fallback, nil
-		}
 		return nil, err
 	}
 
@@ -388,10 +374,6 @@ func (p *YouTubePlatform) fetchVideo(videoID string) (*state.Track, error) {
 	}
 
 	if err := p.callInnerTube("player", payload, &result); err != nil {
-		logger.Warnf("[YouTube] InnerTube player failed, trying Python fallback: %v", err)
-		if fallback, ferr := pythonYouTubeInfo(videoID); ferr == nil && fallback != nil {
-			return fallback, nil
-		}
 		return nil, err
 	}
 
@@ -709,138 +691,4 @@ func atoi(s string) int {
 		}
 	}
 	return n
-}
-
-func pythonYouTubeDownload(ctx context.Context, value string, video bool) (string, error) {
-	input := map[string]any{
-		"action": "download",
-		"value":  value,
-		"video":  video,
-	}
-	body, err := json.Marshal(input)
-	if err != nil {
-		return "", err
-	}
-
-	callCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
-	defer cancel()
-
-	cmd := exec.CommandContext(callCtx, "python3", "kanha/platforms/youtube.py")
-	cmd.Stdin = strings.NewReader(string(body))
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("python downloader failed: %w", err)
-	}
-
-	var result struct {
-		OK    bool   `json:"ok"`
-		Error string `json:"error,omitempty"`
-		Path  string `json:"path,omitempty"`
-	}
-	if err := json.Unmarshal(out, &result); err != nil {
-		return "", fmt.Errorf("invalid python downloader response: %w", err)
-	}
-	if !result.OK || result.Path == "" {
-		if result.Error == "" {
-			result.Error = "python downloader returned no file"
-		}
-		return "", errors.New(result.Error)
-	}
-	return result.Path, nil
-}
-
-// pythonYouTubeResult is the small JSON contract shared with youtube.py.
-// The Python helper is intentionally isolated so the normal Go engine remains
-// the primary path and Python is only used when the Go resolver needs help.
-type pythonYouTubeResult struct {
-	OK     bool                 `json:"ok"`
-	Error  string               `json:"error,omitempty"`
-	Tracks []pythonYouTubeTrack `json:"tracks,omitempty"`
-	Track  *pythonYouTubeTrack  `json:"track,omitempty"`
-}
-
-type pythonYouTubeTrack struct {
-	ID        string `json:"id"`
-	Title     string `json:"title"`
-	Duration  int    `json:"duration"`
-	Thumbnail string `json:"thumbnail"`
-	URL       string `json:"url"`
-}
-
-func runPythonYouTube(action, value string, limit int) (*pythonYouTubeResult, error) {
-	input := map[string]any{
-		"action": action,
-		"value":  value,
-		"limit":  limit,
-	}
-	body, err := json.Marshal(input)
-	if err != nil {
-		return nil, err
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
-
-	script := "kanha/platforms/youtube.py"
-	cmd := exec.CommandContext(ctx, "python3", script)
-	cmd.Stdin = strings.NewReader(string(body))
-	out, err := cmd.Output()
-	if err != nil {
-		if ctx.Err() != nil {
-			return nil, fmt.Errorf("python youtube timeout")
-		}
-		return nil, fmt.Errorf("python youtube helper failed: %w", err)
-	}
-
-	var result pythonYouTubeResult
-	if err := json.Unmarshal(out, &result); err != nil {
-		return nil, fmt.Errorf("invalid python youtube response: %w", err)
-	}
-	if !result.OK {
-		if result.Error == "" {
-			result.Error = "python youtube helper returned an error"
-		}
-		return &result, errors.New(result.Error)
-	}
-	return &result, nil
-}
-
-func pythonYouTubeSearch(query string, limit int) ([]*state.Track, error) {
-	result, err := runPythonYouTube("search", query, limit)
-	if err != nil {
-		return nil, err
-	}
-	tracks := make([]*state.Track, 0, len(result.Tracks))
-	for _, t := range result.Tracks {
-		if t.ID == "" || t.Title == "" {
-			continue
-		}
-		tracks = append(tracks, &state.Track{
-			ID:       t.ID,
-			Title:    t.Title,
-			Duration: t.Duration,
-			Artwork:  t.Thumbnail,
-			URL:      t.URL,
-			Source:   PlatformYouTube,
-		})
-	}
-	return tracks, nil
-}
-
-func pythonYouTubeInfo(videoID string) (*state.Track, error) {
-	result, err := runPythonYouTube("info", videoID, 1)
-	if err != nil {
-		return nil, err
-	}
-	if result.Track == nil || result.Track.ID == "" {
-		return nil, errors.New("python youtube returned no track")
-	}
-	return &state.Track{
-		ID:       result.Track.ID,
-		Title:    result.Track.Title,
-		Duration: result.Track.Duration,
-		Artwork:  result.Track.Thumbnail,
-		URL:      result.Track.URL,
-		Source:   PlatformYouTube,
-	}, nil
 }
