@@ -157,43 +157,65 @@ func (y *YtdlpPlatform) Download(
 		return "", errUnsafeURL
 	}
 
-	args := []string{
+	// Keep the downloader independent of Meow API.  YouTube changes its
+	// streaming clients frequently, so use yt-dlp's current JS/EJS support
+	// and retry once with an available cookie file if the first attempt fails.
+	baseArgs := []string{
 		"--no-playlist",
 		"--no-part",
 		"--geo-bypass",
 		"--no-warnings",
-		"--ignore-errors",
 		"--no-check-certificate",
-		"-q",
+		"--retries", "3",
+		"--fragment-retries", "3",
+		"--socket-timeout", "30",
+		"--js-runtimes", "deno:/usr/local/bin/deno",
+		"--remote-components", "ejs:github",
 		"-o", getPath(track, ".%(ext)s"),
 	}
 
+	if y.isYouTubeURL(track.URL) {
+		baseArgs = append(baseArgs, "--extractor-args", "youtube:player_client=android,web")
+	}
+
 	if track.Video {
-		args = append(args,
-			"-f", "(b[height>=360][height<=1080]/bv*[height>=360][height<=1080]/bv*)+(ba[abr>=180][abr<=360]/ba)/b",
+		baseArgs = append(baseArgs,
+			"-f", "bv*[height<=1080]+ba/b[height<=1080]/b",
 		)
 	} else {
-		args = append(args,
-			"-f", "ba[abr>=180][abr<=360]/ba",
+		baseArgs = append(baseArgs,
+			"-f", "ba/b",
 			"-x",
+			"--audio-format", "mp3",
+			"--audio-quality", "0",
 			"--concurrent-fragments", "4",
 		)
 	}
 
-	if y.isYouTubeURL(track.URL) {
-		if cookieFile, err := cookies.GetRandomCookieFile(); err == nil && cookieFile != "" {
-			args = append(args, "--cookies", cookieFile)
-		}
-	}
-
-	args = append(args, "--", safeURL)
+	args := append(append([]string{}, baseArgs...), "--", safeURL)
 
 	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	if err := cmd.Run(); err != nil {
+	err = cmd.Run()
+	// If YouTube rejects the anonymous request, retry with a configured cookie.
+	// This is still completely independent of any API key.
+	if err != nil && y.isYouTubeURL(track.URL) {
+		if cookieFile, cookieErr := cookies.GetRandomCookieFile(); cookieErr == nil && cookieFile != "" {
+			findAndRemove(track)
+			stdout.Reset()
+			stderr.Reset()
+			args = append(append([]string{}, baseArgs...), "--cookies", cookieFile, "--", safeURL)
+			cmd = exec.CommandContext(ctx, "yt-dlp", args...)
+			cmd.Stdout = &stdout
+			cmd.Stderr = &stderr
+			err = cmd.Run()
+		}
+	}
+
+	if err != nil {
 		findAndRemove(track)
 		if isDownloadCancelled(err) {
 			return "", err
