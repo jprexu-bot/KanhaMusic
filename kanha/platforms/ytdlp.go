@@ -136,6 +136,8 @@ func (y *YtdlpPlatform) Get(query string, video bool) ([]*state.Track, error) {
 	return tracks, nil
 }
 
+// CanDownload keeps YouTube playback independent of any external streaming API.
+// yt-dlp is bundled by the Docker image and is the primary playback downloader.
 func (y *YtdlpPlatform) CanDownload(source state.PlatformName) bool {
 	return source == PlatformYtDlp || source == PlatformYouTube
 }
