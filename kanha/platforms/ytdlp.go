@@ -55,24 +55,58 @@ type ytdlpInfo struct {
 
 var (
 	bannedExtractors = map[string]bool{
-		"alphaporno": true, "beeg": true, "behindkink": true,
-		"bongacams": true, "cam4": true, "cammodels": true,
-		"camsoda": true, "chaturbate": true, "drtuber": true,
-		"eporner": true, "erocast": true, "eroprofile": true,
-		"fourtube": true, "goshgay": true, "hellporno": true,
-		"iwara": true, "lovehomeporn": true, "manyvids": true,
-		"motherless": true, "murrtube": true, "nonktube": true,
-		"noodlemagazine": true, "nubilesporn": true, "nuvid": true,
-		"oftv": true, "peekvids": true, "pornbox": true,
-		"pornflip": true, "pornhub": true, "pornotube": true,
-		"pornovoisines": true, "pornoxo": true, "redgifs": true,
-		"redtube": true, "rule34video": true, "sauceplus": true,
-		"sexu": true, "slutload": true, "spankbang": true,
-		"stripchat": true, "sunporno": true, "thisvid": true,
-		"tnaflix": true, "toypics": true, "txxx": true,
-		"xhamster": true, "xnxx": true, "xvideos": true,
-		"xxxymovies": true, "youjizz": true, "youporn": true,
-		"zenporn": true,
+		"alphaporno": true,
+		"beeg":       true,
+		"behindkink": true,
+		"bongacams":  true,
+		"cam4":       true,
+		"cammodels":  true,
+		"camsoda":    true,
+		"chaturbate": true,
+		"drtuber":    true,
+		"eporner":    true,
+		"erocast":    true,
+		"eroprofile": true,
+		"fourtube":   true,
+		"goshgay":    true,
+		"hellporno":  true,
+		"iwara":      true,
+		"lovehomeporn": true,
+		"manyvids":     true,
+		"motherless":   true,
+		"murrtube":     true,
+		"nonktube":     true,
+		"noodlemagazine": true,
+		"nubilesporn":    true,
+		"nuvid":          true,
+		"oftv":           true,
+		"peekvids":       true,
+		"pornbox":        true,
+		"pornflip":       true,
+		"pornhub":        true,
+		"pornotube":      true,
+		"pornovoisines":  true,
+		"pornoxo":        true,
+		"redgifs":        true,
+		"redtube":        true,
+		"rule34video":    true,
+		"sauceplus":      true,
+		"sexu":           true,
+		"slutload":       true,
+		"spankbang":      true,
+		"stripchat":      true,
+		"sunporno":       true,
+		"thisvid":        true,
+		"tnaflix":        true,
+		"toypics":        true,
+		"txxx":           true,
+		"xhamster":       true,
+		"xnxx":           true,
+		"xvideos":        true,
+		"xxxymovies":     true,
+		"youjizz":        true,
+		"youporn":        true,
+		"zenporn":        true,
 	}
 
 	audioOnlyExtractors = map[string]bool{
@@ -114,7 +148,11 @@ func (y *YtdlpPlatform) CanGet(query string) bool {
 		!strings.HasSuffix(host, ".t.me")
 }
 
-func (y *YtdlpPlatform) Get(query string, video bool) ([]*state.Track, error) {
+func (y *YtdlpPlatform) Get(
+	query string,
+	video bool,
+) ([]*state.Track, error) {
+
 	safeURL, err := sanitizeMediaURL(query)
 	if err != nil {
 		return nil, errUnsafeURL
@@ -122,26 +160,37 @@ func (y *YtdlpPlatform) Get(query string, video bool) ([]*state.Track, error) {
 
 	info, err := y.extractMetadata(safeURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract metadata: %w", err)
+		return nil, fmt.Errorf(
+			"failed to extract metadata: %w",
+			err,
+		)
 	}
 
 	if info.IsLive {
-		return nil, errors.New("live streams are not supported")
+		return nil, errors.New(
+			"live streams are not supported",
+		)
 	}
 
 	if bannedExtractors[strings.ToLower(info.Extractor)] {
-		return nil, errors.New("adult content is not allowed")
+		return nil, errors.New(
+			"adult content is not allowed",
+		)
 	}
 
 	var tracks []*state.Track
 
 	if len(info.Entries) > 0 {
 		for _, entry := range info.Entries {
-			if entry.IsLive || bannedExtractors[strings.ToLower(entry.Extractor)] {
+			if entry.IsLive ||
+				bannedExtractors[strings.ToLower(entry.Extractor)] {
 				continue
 			}
 
-			tracks = append(tracks, y.toTrack(&entry, video))
+			tracks = append(
+				tracks,
+				y.toTrack(&entry, video),
+			)
 		}
 	} else {
 		tracks = []*state.Track{
@@ -152,8 +201,11 @@ func (y *YtdlpPlatform) Get(query string, video bool) ([]*state.Track, error) {
 	return tracks, nil
 }
 
-func (y *YtdlpPlatform) CanDownload(source state.PlatformName) bool {
-	return source == PlatformYtDlp || source == PlatformYouTube
+func (y *YtdlpPlatform) CanDownload(
+	source state.PlatformName,
+) bool {
+	return source == PlatformYtDlp ||
+		source == PlatformYouTube
 }
 
 func (y *YtdlpPlatform) Download(
@@ -178,17 +230,39 @@ func (y *YtdlpPlatform) Download(
 		"--geo-bypass",
 		"--no-warnings",
 		"--no-check-certificate",
-		"--retries", "3",
-		"--fragment-retries", "3",
-		"--extractor-retries", "2",
-		"--socket-timeout", "30",
-		"--js-runtimes", "deno:/usr/local/bin/deno",
-		"--sleep-requests", "5",
-		"--sleep-interval", "5",
-		"--max-sleep-interval", "10",
-		"--retry-sleep", "http:exp=5:30",
-		"--retry-sleep", "fragment:exp=2:10",
-		"-o", getPath(track, ".%(ext)s"),
+
+		"--retries",
+		"3",
+
+		"--fragment-retries",
+		"3",
+
+		"--extractor-retries",
+		"2",
+
+		"--socket-timeout",
+		"30",
+
+		"--js-runtimes",
+		"deno:/usr/local/bin/deno",
+
+		"--sleep-requests",
+		"5",
+
+		"--sleep-interval",
+		"5",
+
+		"--max-sleep-interval",
+		"10",
+
+		"--retry-sleep",
+		"http:exp=5:30",
+
+		"--retry-sleep",
+		"fragment:exp=2:10",
+
+		"-o",
+		getPath(track, ".%(ext)s"),
 	}
 
 	if track.Video {
@@ -200,11 +274,19 @@ func (y *YtdlpPlatform) Download(
 	} else {
 		baseArgs = append(
 			baseArgs,
-			"-f", "ba/b",
+			"-f",
+			"ba/b",
+
 			"-x",
-			"--audio-format", "mp3",
-			"--audio-quality", "0",
-			"--concurrent-fragments", "2",
+
+			"--audio-format",
+			"mp3",
+
+			"--audio-quality",
+			"0",
+
+			"--concurrent-fragments",
+			"2",
 		)
 	}
 
@@ -230,24 +312,42 @@ func (y *YtdlpPlatform) Download(
 
 		findAndRemove(track)
 
-		args := append([]string{}, attempt...)
-		args = append(args, "--", safeURL)
+		args := append(
+			[]string{},
+			attempt...,
+		)
+
+		args = append(
+			args,
+			"--",
+			safeURL,
+		)
 
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
 
-		cmd := exec.CommandContext(ctx, "yt-dlp", args...)
+		cmd := exec.CommandContext(
+			ctx,
+			"yt-dlp",
+			args...,
+		)
 
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 
 		err = cmd.Run()
 
-		lastStdout = strings.TrimSpace(stdout.String())
-		lastStderr = strings.TrimSpace(stderr.String())
+		lastStdout = strings.TrimSpace(
+			stdout.String(),
+		)
+
+		lastStderr = strings.TrimSpace(
+			stderr.String(),
+		)
 
 		if err == nil {
 			if p := findFile(track); p != "" {
+
 				logger.Infof(
 					"YtDlp: downloaded %s (attempt %d)",
 					p,
@@ -281,13 +381,19 @@ func (y *YtdlpPlatform) Download(
 		}
 
 		logStderr := lastStderr
+
 		if len(logStderr) > 6000 {
-			logStderr = logStderr[len(logStderr)-6000:]
+			logStderr = logStderr[
+				len(logStderr)-6000:
+			]
 		}
 
 		logStdout := lastStdout
+
 		if len(logStdout) > 3000 {
-			logStdout = logStdout[len(logStdout)-3000:]
+			logStdout = logStdout[
+				len(logStdout)-3000:
+			]
 		}
 
 		logger.Errorf(
@@ -317,7 +423,10 @@ func (y *YtdlpPlatform) Download(
 		)
 }
 
-func isYouTubeBotCheck(output string) bool {
+func isYouTubeBotCheck(
+	output string,
+) bool {
+
 	v := strings.ToLower(output)
 
 	patterns := []string{
@@ -354,24 +463,43 @@ func (y *YtdlpPlatform) extractMetadata(
 		"--flat-playlist",
 		"--no-warnings",
 		"--no-check-certificate",
-		"--extractor-retries", "2",
-		"--socket-timeout", "30",
-		"--js-runtimes", "deno:/usr/local/bin/deno",
-		"--sleep-requests", "3",
+
+		"--extractor-retries",
+		"2",
+
+		"--socket-timeout",
+		"30",
+
+		"--js-runtimes",
+		"deno:/usr/local/bin/deno",
+
+		"--sleep-requests",
+		"3",
 	}
 
-	args = append(args, "--", urlStr)
+	args = append(
+		args,
+		"--",
+		urlStr,
+	)
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
+	cmd := exec.CommandContext(
+		ctx,
+		"yt-dlp",
+		args...,
+	)
 
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(stderr.String())
+
+		msg := strings.TrimSpace(
+			stderr.String(),
+		)
 
 		if isYouTubeBotCheck(msg) {
 			return nil,
@@ -381,7 +509,9 @@ func (y *YtdlpPlatform) extractMetadata(
 		}
 
 		if len(msg) > 4000 {
-			msg = msg[len(msg)-4000:]
+			msg = msg[
+				len(msg)-4000:
+			]
 		}
 
 		return nil,
@@ -393,24 +523,30 @@ func (y *YtdlpPlatform) extractMetadata(
 	}
 
 	lines := strings.Split(
-		strings.TrimSpace(stdout.String()),
+		strings.TrimSpace(
+			stdout.String(),
+		),
 		"\n",
 	)
 
 	if len(lines) > 1 {
+
 		var info ytdlpInfo
 
 		for _, line := range lines {
+
 			var entry ytdlpInfo
 
 			if err := json.Unmarshal(
 				[]byte(line),
 				&entry,
 			); err != nil {
+
 				logger.Debugf(
 					"YtDlp: skip bad entry: %v",
 					err,
 				)
+
 				continue
 			}
 
@@ -436,6 +572,7 @@ func (y *YtdlpPlatform) extractMetadata(
 		stdout.Bytes(),
 		&info,
 	); err != nil {
+
 		return nil,
 			fmt.Errorf(
 				"failed to parse metadata JSON: %w",
@@ -458,22 +595,31 @@ func (y *YtdlpPlatform) toTrack(
 		video = false
 	}
 
+	trackURL := info.URL
+
+	if strings.TrimSpace(
+		info.OriginalURL,
+	) != "" {
+		trackURL = info.OriginalURL
+	}
+
 	return &state.Track{
 		ID:       info.ID,
 		Title:    info.Title,
 		Duration: int(info.Duration),
 		Artwork:  info.Thumbnail,
-		URL:      firstNonEmpty(
-			info.OriginalURL,
-			info.URL,
-		),
-		Source: PlatformYtDlp,
-		Video:  video,
+		URL:      trackURL,
+		Source:   PlatformYtDlp,
+		Video:    video,
 	}
 }
 
-func firstNonEmpty(values ...string) string {
+func firstNonEmpty(
+	values ...string,
+) string {
+
 	for _, value := range values {
+
 		if strings.TrimSpace(value) != "" {
 			return value
 		}
@@ -487,6 +633,7 @@ func (y *YtdlpPlatform) isYouTubeURL(
 ) bool {
 
 	for _, p := range ytURLPatterns {
+
 		if p.MatchString(urlStr) {
 			return true
 		}
