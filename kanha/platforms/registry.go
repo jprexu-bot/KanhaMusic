@@ -111,8 +111,9 @@ func GetTracks(c *td.Client, m *td.Message, video bool) ([]*state.Track, error) 
 }
 
 // Download fetches the given track and returns its local file path.
-// It tries every registered platform that can download the track's source,
-// in priority order, and returns the first successful file path.
+// Registered downloaders are tried in descending priority order.
+// For YouTube tracks, Shruti (priority 80) is attempted before yt-dlp (priority 60),
+// so a configured SHRUTI_API_KEY is used first and yt-dlp remains the fallback.
 func Download(
 	ctx context.Context,
 	track *state.Track,
